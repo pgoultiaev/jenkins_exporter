@@ -108,57 +108,57 @@ class JenkinsCollector(object):
                 GaugeMetricFamily(
                     'jenkins_job_{0}'.format(snake_case),
                     'Jenkins build number for {0}'.format(status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'result':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_result'.format(snake_case),
                     'Jenkins result for {0}'.format(status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'duration':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_duration_seconds'.format(snake_case),
                     'Jenkins build duration in seconds for {0}'.format(status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'timestamp':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_timestamp_seconds'.format(snake_case),
                     'Jenkins build timestamp in unixtime for {0}'.format(
                         status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'queuingDurationMillis':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_queuing_duration_seconds'.format(
                         snake_case),
                     'Jenkins build queuing duration in seconds for {0}'.format(
                         status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'totalDurationMillis':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_total_duration_seconds'.format(
                         snake_case),
                     'Jenkins build total duration in seconds for {0}'.format(
                         status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'skipCount':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_skip_count'.format(snake_case),
                     'Jenkins build skip counts for {0}'.format(status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'failCount':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_fail_count'.format(snake_case),
                     'Jenkins build fail counts for {0}'.format(status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'totalCount':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_total_count'.format(snake_case),
                     'Jenkins build total counts for {0}'.format(status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
                 'passCount':
                 GaugeMetricFamily(
                     'jenkins_job_{0}_pass_count'.format(snake_case),
                     'Jenkins build pass counts for {0}'.format(status),
-                    labels=["jobname"]),
+                    labels=["jobname", "jobnumber"]),
             }
 
     def _get_metrics(self, name, job):
@@ -170,52 +170,52 @@ class JenkinsCollector(object):
 
     def _add_data_to_prometheus_structure(self, status, status_data, job,
                                           name):
+        jobnumber = str(status_data.get('number'))
+        if status_data.get('number', 0):
+            self._prometheus_metrics[status]['number'].add_metric(
+                [name, jobnumber], status_data.get('number'))
+
         # If there's a null result, we want to pass.
         if status_data.get('duration', 0):
             self._prometheus_metrics[status]['duration'].add_metric(
-                [name],
+                [name, jobnumber],
                 status_data.get('duration') / 1000.0)
         if status_data.get('timestamp', 0):
             self._prometheus_metrics[status]['timestamp'].add_metric(
-                [name],
+                [name, jobnumber],
                 status_data.get('timestamp') / 1000.0)
-        if status_data.get('number', 0):
-            self._prometheus_metrics[status]['number'].add_metric(
-                [name], status_data.get('number'))
 
         result = 1 if status_data.get('result') == 'SUCCESS' else 0
-        print("got result {} for status {}, formatting result to {}".format(
-            status_data.get('result'), status, result))
-
         if status_data.get('result', 0):
-            self._prometheus_metrics[status]['result'].add_metric([name],
-                                                                  result)
+            self._prometheus_metrics[status]['result'].add_metric(
+                [name, jobnumber], result)
+
         actions_metrics = status_data.get('actions', [{}])
         for metric in actions_metrics:
             if metric.get('queuingDurationMillis', False):
                 self._prometheus_metrics[status][
                     'queuingDurationMillis'].add_metric(
-                        [name],
+                        [name, jobnumber],
                         metric.get('queuingDurationMillis') / 1000.0)
             if metric.get('totalDurationMillis', False):
                 self._prometheus_metrics[status][
                     'totalDurationMillis'].add_metric(
-                        [name],
+                        [name, jobnumber],
                         metric.get('totalDurationMillis') / 1000.0)
             if metric.get('skipCount', False):
                 self._prometheus_metrics[status]['skipCount'].add_metric(
-                    [name], metric.get('skipCount'))
+                    [name, jobnumber], metric.get('skipCount'))
             if metric.get('failCount', False):
                 self._prometheus_metrics[status]['failCount'].add_metric(
-                    [name], metric.get('failCount'))
+                    [name, jobnumber], metric.get('failCount'))
             if metric.get('totalCount', False):
                 self._prometheus_metrics[status]['totalCount'].add_metric(
-                    [name], metric.get('totalCount'))
+                    [name, jobnumber], metric.get('totalCount'))
                 # Calculate passCount by subtracting fails and skips from totalCount
                 passcount = metric.get('totalCount') - metric.get(
                     'failCount') - metric.get('skipCount')
                 self._prometheus_metrics[status]['passCount'].add_metric(
-                    [name], passcount)
+                    [name, jobnumber], passcount)
 
 
 def parse_args():
