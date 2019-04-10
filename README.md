@@ -1,6 +1,6 @@
 # Jenkins CI/CD metrics exporter
 
-Exports metrics from a jenkins instance in prometheus format.
+Exports metrics from a jenkins instance in prometheus format to quickly be able to query and visualise CI/CD metrics.
 Currently, this setup uses telegraf and influxdb instead of prometheus.
 
 The exported data is queried in Grafana to get an overview of your CI/CD metrics in a dashboard.
