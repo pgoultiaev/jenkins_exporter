@@ -11,18 +11,23 @@ from sys import exit
 from prometheus_client import start_http_server, Summary
 from prometheus_client.core import GaugeMetricFamily, REGISTRY
 
-DEBUG = int(os.environ.get('DEBUG', '0'))
+DEBUG = int(os.environ.get("DEBUG", "0"))
 
-COLLECTION_TIME = Summary('jenkins_collector_collect_seconds',
-                          'Time spent to collect metrics from Jenkins')
+COLLECTION_TIME = Summary(
+    "jenkins_collector_collect_seconds", "Time spent to collect metrics from Jenkins"
+)
 
 
 class JenkinsCollector(object):
     # The build statuses we want to export about.
     statuses = [
-        "lastBuild", "lastCompletedBuild", "lastFailedBuild",
-        "lastStableBuild", "lastSuccessfulBuild", "lastUnstableBuild",
-        "lastUnsuccessfulBuild"
+        "lastBuild",
+        "lastCompletedBuild",
+        "lastFailedBuild",
+        "lastStableBuild",
+        "lastSuccessfulBuild",
+        "lastUnstableBuild",
+        "lastUnsuccessfulBuild",
     ]
 
     def __init__(self, target, user, password, insecure):
@@ -40,7 +45,7 @@ class JenkinsCollector(object):
         self._setup_empty_prometheus_metrics()
 
         for job in jobs:
-            name = job['fullName']
+            name = job["fullName"]
             if DEBUG:
                 print("Found Job: {}".format(name))
                 pprint(job)
@@ -55,14 +60,15 @@ class JenkinsCollector(object):
 
     def _request_data(self):
         # Request exactly the information we need from Jenkins
-        url = '{0}/api/json'.format(self._target)
-        jobs = "[fullName,number,result,timestamp,duration,actions[queuingDurationMillis,totalDurationMillis," \
-               "skipCount,failCount,totalCount,passCount]]"
-        tree = 'jobs[fullName,url,{0}]'.format(','.join(
-            [s + jobs for s in self.statuses]))
-        params = {
-            'tree': tree,
-        }
+        url = "{0}/api/json".format(self._target)
+        jobs = (
+            "[fullName,number,result,timestamp,duration,actions[queuingDurationMillis,totalDurationMillis,"
+            "skipCount,failCount,totalCount,passCount]]"
+        )
+        tree = "jobs[fullName,url,{0}]".format(
+            ",".join([s + jobs for s in self.statuses])
+        )
+        params = {"tree": tree}
 
         def parsejobs(myurl):
             # params = tree: jobs[name,lastBuild[number,timestamp,duration,actions[queuingDurationMillis...
@@ -73,25 +79,32 @@ class JenkinsCollector(object):
                     params=params,
                     auth=(self._user, self._password),
                     verify=(not self._insecure),
-                    timeout=(10, 10))
+                    timeout=(10, 10),
+                )
             else:
                 response = requests.get(
-                    myurl, params=params, verify=(not self._insecure))
+                    myurl, params=params, verify=(not self._insecure)
+                )
             if DEBUG:
                 pprint(response.text)
             if response.status_code != requests.codes.ok:
-                raise Exception("Call to url %s failed with status: %s" %
-                                (myurl, response.status_code))
+                raise Exception(
+                    "Call to url %s failed with status: %s"
+                    % (myurl, response.status_code)
+                )
             result = response.json()
             if DEBUG:
                 pprint(result)
 
             jobs = []
-            for job in result['jobs']:
-                if job['_class'] == 'com.cloudbees.hudson.plugins.folder.Folder' or \
-                   job['_class'] == 'jenkins.branch.OrganizationFolder' or \
-                   job['_class'] == 'org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject':
-                    jobs += parsejobs(job['url'] + '/api/json')
+            for job in result["jobs"]:
+                if (
+                    job["_class"] == "com.cloudbees.hudson.plugins.folder.Folder"
+                    or job["_class"] == "jenkins.branch.OrganizationFolder"
+                    or job["_class"]
+                    == "org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject"
+                ):
+                    jobs += parsejobs(job["url"] + "/api/json")
                 else:
                     jobs.append(job)
             return jobs
@@ -102,160 +115,166 @@ class JenkinsCollector(object):
         # The metrics we want to export.
         self._prometheus_metrics = {}
         for status in self.statuses:
-            snake_case = re.sub('([A-Z])', '_\\1', status).lower()
+            snake_case = re.sub("([A-Z])", "_\\1", status).lower()
             self._prometheus_metrics[status] = {
-                'number':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}'.format(snake_case),
-                    'Jenkins build number for {0}'.format(status),
-                    labels=["jobname", "jobnumber"]),
-                'result':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_result'.format(snake_case),
-                    'Jenkins result for {0}'.format(status),
-                    labels=["jobname", "jobnumber"]),
-                'duration':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_duration_seconds'.format(snake_case),
-                    'Jenkins build duration in seconds for {0}'.format(status),
-                    labels=["jobname", "jobnumber"]),
-                'timestamp':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_timestamp_seconds'.format(snake_case),
-                    'Jenkins build timestamp in unixtime for {0}'.format(
-                        status),
-                    labels=["jobname", "jobnumber"]),
-                'queuingDurationMillis':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_queuing_duration_seconds'.format(
-                        snake_case),
-                    'Jenkins build queuing duration in seconds for {0}'.format(
-                        status),
-                    labels=["jobname", "jobnumber"]),
-                'totalDurationMillis':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_total_duration_seconds'.format(
-                        snake_case),
-                    'Jenkins build total duration in seconds for {0}'.format(
-                        status),
-                    labels=["jobname", "jobnumber"]),
-                'skipCount':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_skip_count'.format(snake_case),
-                    'Jenkins build skip counts for {0}'.format(status),
-                    labels=["jobname", "jobnumber"]),
-                'failCount':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_fail_count'.format(snake_case),
-                    'Jenkins build fail counts for {0}'.format(status),
-                    labels=["jobname", "jobnumber"]),
-                'totalCount':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_total_count'.format(snake_case),
-                    'Jenkins build total counts for {0}'.format(status),
-                    labels=["jobname", "jobnumber"]),
-                'passCount':
-                GaugeMetricFamily(
-                    'jenkins_job_{0}_pass_count'.format(snake_case),
-                    'Jenkins build pass counts for {0}'.format(status),
-                    labels=["jobname", "jobnumber"]),
+                "number": GaugeMetricFamily(
+                    "jenkins_job_{0}".format(snake_case),
+                    "Jenkins build number for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "result": GaugeMetricFamily(
+                    "jenkins_job_{0}_result".format(snake_case),
+                    "Jenkins result for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "duration": GaugeMetricFamily(
+                    "jenkins_job_{0}_duration_seconds".format(snake_case),
+                    "Jenkins build duration in seconds for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "timestamp": GaugeMetricFamily(
+                    "jenkins_job_{0}_timestamp_seconds".format(snake_case),
+                    "Jenkins build timestamp in unixtime for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "queuingDurationMillis": GaugeMetricFamily(
+                    "jenkins_job_{0}_queuing_duration_seconds".format(snake_case),
+                    "Jenkins build queuing duration in seconds for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "totalDurationMillis": GaugeMetricFamily(
+                    "jenkins_job_{0}_total_duration_seconds".format(snake_case),
+                    "Jenkins build total duration in seconds for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "skipCount": GaugeMetricFamily(
+                    "jenkins_job_{0}_skip_count".format(snake_case),
+                    "Jenkins build skip counts for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "failCount": GaugeMetricFamily(
+                    "jenkins_job_{0}_fail_count".format(snake_case),
+                    "Jenkins build fail counts for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "totalCount": GaugeMetricFamily(
+                    "jenkins_job_{0}_total_count".format(snake_case),
+                    "Jenkins build total counts for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
+                "passCount": GaugeMetricFamily(
+                    "jenkins_job_{0}_pass_count".format(snake_case),
+                    "Jenkins build pass counts for {0}".format(status),
+                    labels=["jobname", "jobnumber"],
+                ),
             }
 
     def _get_metrics(self, name, job):
         for status in self.statuses:
             if status in job.keys():
                 status_data = job[status] or {}
-                self._add_data_to_prometheus_structure(status, status_data,
-                                                       job, name)
+                self._add_data_to_prometheus_structure(status, status_data, job, name)
 
-    def _add_data_to_prometheus_structure(self, status, status_data, job,
-                                          name):
-        jobnumber = str(status_data.get('number'))
-        if status_data.get('number', 0):
-            self._prometheus_metrics[status]['number'].add_metric(
-                [name, jobnumber], status_data.get('number'))
+    def _add_data_to_prometheus_structure(self, status, status_data, job, name):
+        jobnumber = str(status_data.get("number"))
+        if status_data.get("number", 0):
+            self._prometheus_metrics[status]["number"].add_metric(
+                [name, jobnumber], status_data.get("number")
+            )
 
         # If there's a null result, we want to pass.
-        if status_data.get('duration', 0):
-            self._prometheus_metrics[status]['duration'].add_metric(
-                [name, jobnumber],
-                status_data.get('duration') / 1000.0)
-        if status_data.get('timestamp', 0):
-            self._prometheus_metrics[status]['timestamp'].add_metric(
-                [name, jobnumber],
-                status_data.get('timestamp') / 1000.0)
+        if status_data.get("duration", 0):
+            self._prometheus_metrics[status]["duration"].add_metric(
+                [name, jobnumber], status_data.get("duration") / 1000.0
+            )
+        if status_data.get("timestamp", 0):
+            self._prometheus_metrics[status]["timestamp"].add_metric(
+                [name, jobnumber], status_data.get("timestamp") / 1000.0
+            )
 
-        result = 1 if status_data.get('result') == 'SUCCESS' else 0
-        if status_data.get('result', 0):
-            self._prometheus_metrics[status]['result'].add_metric(
-                [name, jobnumber], result)
+        result = 1 if status_data.get("result") == "SUCCESS" else 0
+        if status_data.get("result", 0):
+            self._prometheus_metrics[status]["result"].add_metric(
+                [name, jobnumber], result
+            )
 
-        actions_metrics = status_data.get('actions', [{}])
+        actions_metrics = status_data.get("actions", [{}])
         for metric in actions_metrics:
-            if metric.get('queuingDurationMillis', False):
-                self._prometheus_metrics[status][
-                    'queuingDurationMillis'].add_metric(
-                        [name, jobnumber],
-                        metric.get('queuingDurationMillis') / 1000.0)
-            if metric.get('totalDurationMillis', False):
-                self._prometheus_metrics[status][
-                    'totalDurationMillis'].add_metric(
-                        [name, jobnumber],
-                        metric.get('totalDurationMillis') / 1000.0)
-            if metric.get('skipCount', False):
-                self._prometheus_metrics[status]['skipCount'].add_metric(
-                    [name, jobnumber], metric.get('skipCount'))
-            if metric.get('failCount', False):
-                self._prometheus_metrics[status]['failCount'].add_metric(
-                    [name, jobnumber], metric.get('failCount'))
-            if metric.get('totalCount', False):
-                self._prometheus_metrics[status]['totalCount'].add_metric(
-                    [name, jobnumber], metric.get('totalCount'))
+            if metric.get("queuingDurationMillis", False):
+                self._prometheus_metrics[status]["queuingDurationMillis"].add_metric(
+                    [name, jobnumber], metric.get("queuingDurationMillis") / 1000.0
+                )
+            if metric.get("totalDurationMillis", False):
+                self._prometheus_metrics[status]["totalDurationMillis"].add_metric(
+                    [name, jobnumber], metric.get("totalDurationMillis") / 1000.0
+                )
+            if metric.get("skipCount", False):
+                self._prometheus_metrics[status]["skipCount"].add_metric(
+                    [name, jobnumber], metric.get("skipCount")
+                )
+            if metric.get("failCount", False):
+                self._prometheus_metrics[status]["failCount"].add_metric(
+                    [name, jobnumber], metric.get("failCount")
+                )
+            if metric.get("totalCount", False):
+                self._prometheus_metrics[status]["totalCount"].add_metric(
+                    [name, jobnumber], metric.get("totalCount")
+                )
                 # Calculate passCount by subtracting fails and skips from totalCount
-                passcount = metric.get('totalCount') - metric.get(
-                    'failCount') - metric.get('skipCount')
-                self._prometheus_metrics[status]['passCount'].add_metric(
-                    [name, jobnumber], passcount)
+                passcount = (
+                    metric.get("totalCount")
+                    - metric.get("failCount")
+                    - metric.get("skipCount")
+                )
+                self._prometheus_metrics[status]["passCount"].add_metric(
+                    [name, jobnumber], passcount
+                )
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='jenkins exporter args jenkins address and port')
+        description="jenkins exporter args jenkins address and port"
+    )
     parser.add_argument(
-        '-j',
-        '--jenkins',
-        metavar='jenkins',
+        "-j",
+        "--jenkins",
+        metavar="jenkins",
         required=False,
-        help='server url from the jenkins api',
-        default=os.environ.get('JENKINS_SERVER', 'http://jenkins:8080'))
+        help="server url from the jenkins api",
+        default=os.environ.get("JENKINS_SERVER", "http://jenkins:8080"),
+    )
     parser.add_argument(
-        '--user',
-        metavar='user',
+        "--user",
+        metavar="user",
         required=False,
-        help='jenkins api user',
-        default=os.environ.get('JENKINS_USER'))
+        help="jenkins api user",
+        default=os.environ.get("JENKINS_USER"),
+    )
     parser.add_argument(
-        '--password',
-        metavar='password',
+        "--password",
+        metavar="password",
         required=False,
-        help='jenkins api password',
-        default=os.environ.get('JENKINS_PASS'))
+        help="jenkins api password",
+        default=os.environ.get("JENKINS_PASS"),
+    )
     parser.add_argument(
-        '-p',
-        '--port',
-        metavar='port',
+        "-p",
+        "--port",
+        metavar="port",
         required=False,
         type=int,
-        help='Listen to this port',
-        default=int(os.environ.get('VIRTUAL_PORT', '9118')))
+        help="Listen to this port",
+        default=int(os.environ.get("VIRTUAL_PORT", "9118")),
+    )
     parser.add_argument(
-        '-k',
-        '--insecure',
-        dest='insecure',
+        "-k",
+        "--insecure",
+        dest="insecure",
         required=False,
-        action='store_true',
-        help='Allow connection to insecure Jenkins API',
-        default=False)
+        action="store_true",
+        help="Allow connection to insecure Jenkins API",
+        default=False,
+    )
     return parser.parse_args()
 
 
@@ -264,8 +283,8 @@ def main():
         args = parse_args()
         port = int(args.port)
         REGISTRY.register(
-            JenkinsCollector(args.jenkins, args.user, args.password,
-                             args.insecure))
+            JenkinsCollector(args.jenkins, args.user, args.password, args.insecure)
+        )
         start_http_server(port)
         print("Polling {}. Serving at port: {}".format(args.jenkins, port))
         while True:
